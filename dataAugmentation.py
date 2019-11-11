@@ -43,7 +43,7 @@ def overlay(sources, sourceBboxes, bckg):
         
         # reshape source in order to limit its size on the bckg
         # ratio is chosen based on the width i.e. x-axis (arbitrarily)
-        ratioChoice = np.arange(0.05, 0.1, step = 0.01)
+        ratioChoice = np.arange(0.2, 0.5, step = 0.01)
         ratioChosen = np.random.choice(ratioChoice)
         currentRatio = source.shape[1] / bckg.shape[1]
         factor = currentRatio/ratioChosen
@@ -53,7 +53,7 @@ def overlay(sources, sourceBboxes, bckg):
         
         # remember the alpha channel of the source if one exists
         try:
-            alpha = source[:,:,3]
+            alpha = source[:,:,3]/255
         except IndexError:
             print("Source image has no alpha channel," 
                   "overlayed source will not feature any transparency")
@@ -98,18 +98,27 @@ def overlay(sources, sourceBboxes, bckg):
         # perform overlay at chosen location
         # takes into account alpha channel of the source
         if alpha.any():
-            alphaMask = alpha == 255
+            alphaMask = alpha       
+                                     # augmentation such as blur, ... touches
+                                     # the alpha channel values
+                                     # therefore one has to be more relaxed
+                                     # on the condition
+                                     # if picture was perfectly sharp, alpha
+                                     # channel value should be either
+                                     # 255 (no transparency at this pixel)
+                                     # or 0 (full transparency at this pixel)
+                                     # based on tests, 50 seems to work OK
             alphaMask = np.expand_dims(alphaMask, axis=2)
         # if source has no alpha channel
         # simply create a dummy mask with shape (heightSource, widthSource)
-        # that sets the alpha channel as one everywhere i.e. 
+        # that sets the alpha channel as 255 everywhere i.e. 
         # include the entire source image into the background without 
         # any transparency
         else:
             alphaMask = np.ones(source.shape[:2])
-        bckgPadded[yBot:yTop, xLeft:xRight, :] = (alphaMask*source[:,:,:3] +
+        bckgPadded[yBot:yTop, xLeft:xRight, :] = (alphaMask*source[:,:,:] +
         (1-alphaMask)*bckgPadded[yBot:yTop, xLeft:xRight, :])
-        
+        #bckgPadded[yBot:yTop, xLeft:xRight, :] = np.where(alphaMask, source, bckgPadded[yBot:yTop, xLeft:xRight,:])
         # In source image, bounding box is around the entire image
         # and assumed at the middle therefore one computes the distance between
         # the center of the bounding box and its edges
@@ -153,9 +162,17 @@ def overlay(sources, sourceBboxes, bckg):
     return bckg, targetBboxes
 
 # define the symbol to be recognized by YOLO
-symbol = cv2.imread((r"C:/Users/DAA426/Documents/Work/"
-                     r"objectDetectionPipeline/RawSymbols/controlValve.png"),
-            cv2.IMREAD_UNCHANGED) # read with alpha channel
+# at the moment, code can only handle ONE symbol
+symbolsPath = os.path.join(os.getcwd(), r"rawSymbols")
+symbols = []
+for symbol in os.listdir(symbolsPath):
+    if symbol.endswith("png") :
+        symbols.append(cv2.imread((r"rawSymbols/controlValve.png"),
+                    cv2.IMREAD_UNCHANGED)) # read with alpha channel
+
+# since manages only one symbol,
+# change list to single
+symbol = symbols[0]
 
 # and define its bounding box i.e. surrounding the complete picture symbol
 # note that to avoid issues, the top left anchor of bounding box is 
@@ -188,19 +205,19 @@ seq = iaa.Sequential([
     #iaa.Crop(percent=(0, 0.1)), # random crops
     # Small gaussian blur with random sigma between 0 and 0.5.
     # But we only blur about 50% of all images.
-    iaa.Sometimes(0.5,
-        iaa.GaussianBlur(sigma=(0, 0.5))
-    ),
+    #iaa.Sometimes(1.0,
+    #    iaa.GaussianBlur(sigma=(0, 10.0))
+    #),
     # Strengthen or weaken the contrast in each image.
-    iaa.ContrastNormalization((0.75, 1.5)),
+    #iaa.ContrastNormalization((0.75, 1.5)),
     # Add gaussian noise.
     # For 50% of all images, we sample the noise once per pixel.
     # For the other 50% of all images, we sample the noise per pixel
-    iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05*255)),
+    #iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05*255)),
     # Make some images brighter and some darker.
     # In 20% of all cases, we sample the multiplier once per channel,
     # which can end up changing the color of the images.
-    iaa.Multiply((0.8, 1.2), per_channel=0.2),
+    #iaa.Multiply((0.8, 1.2), per_channel=0.2),
     # Apply affine transformations to each image.
     # Scale/zoom them, translate/move them, rotate them and shear them.
     iaa.Affine(
@@ -209,24 +226,55 @@ seq = iaa.Sequential([
         rotate=(-25, 25),
         shear=(-8, 8)
     )
-], random_order=True) # apply augmenters in random order
+], random_order=False) # apply augmenters in random order
+
+#seq = iaa.Sequential([
+#        iaa.WithChannels([0,1,2,3],iaa.Affine(
+#                scale={"x": (0.8, 1.2), "y": (0.8, 1.2)},
+#                rotate=(-25, 25),
+#                shear=(-8, 8))), 
+#        iaa.WithChannels([0,1,2,3], iaa.GaussianBlur(sigma=(3.0,10.0)))
+#                        ], random_order=False)
 
 # create an array of identical pictures to be augmented
 # with corresponding bounding boxes
 nbImg = 32
 symbols = np.array([symbol for _ in range(nbImg)],dtype=np.uint8)
 symbolsBbox = [bbox for _ in range(nbImg)]
+#
+#image_aug, bbs_aug = seq.augment(images = symbols, 
+#                                         bounding_boxes=symbolsBbox)
+#
+#for img in image_aug:
+#    alphaMask = img[:,:,3] > 50
+#    bChannel = 255*alphaMask
+#    imgBlue = img.copy()
+#    imgBlue[:,:,2] = bChannel
+#    ia.imshow(imgBlue[:,:,:])
 
 # Initialize the loop & launch
 i = 0
-path = r'C:/Users/DAA426/Documents/Work/objectDetectionPipeline/'
+backgroundPath = os.path.join(os.getcwd(), r"backGrounds")
+trainingPath = os.path.join(os.getcwd(),'trainingSet/')
+try:
+    os.makedirs(trainingPath)
+except FileExistsError:
+    for root, dirs, files in os.walk(trainingPath, topdown=False):
+        for name in files:
+            os.remove(os.path.join(root, name))
+        for name in dirs:
+            os.rmdir(os.path.join(root, name))
+    os.rmdir(trainingPath)
+    os.makedirs(trainingPath)
 overLayedPictures = []
-perBackground = 5
-for background in os.listdir(os.path.join(path, r'background')):
+perBackground = 100
+for background in os.listdir(backgroundPath):
+    background = os.path.join(backgroundPath, background)
     for j in range(perBackground): # choose the number of times to use a background
                             # for generating a training picture
-        backgroundPath = os.path.join(path,r'background',background)
-        backgroundCV2 = cv2.imread(backgroundPath)
+        backgroundCV2 = cv2.imread(background)
+        # add alpha channel to background
+        backgroundCV2 = np.concatenate((backgroundCV2, np.ones((backgroundCV2.shape[0], backgroundCV2.shape[1],1))*255), axis = 2)
         image_aug, bbs_aug = seq.augment(images = symbols, 
                                          bounding_boxes=symbolsBbox)
         bbs_aug = np.array([bbs.remove_out_of_image().clip_out_of_image() for bbs in bbs_aug]) # transforming to array instead of list for easier slicing
@@ -239,26 +287,29 @@ for background in os.listdir(os.path.join(path, r'background')):
         overLayedPictures.append((bckgWithSymbols, bboxes))
         
         # write background with bboxes in YOLO format
-        cv2.imwrite(os.path.join(path, r'trainingSet/training_sample_' + str(i) + '.jpg'), bckgWithSymbols)
+        # png format is important to preserve alpha channel
+        cv2.imwrite(os.path.join(os.getcwd(), r'trainingSet/training_sample_' + str(i) + '.png'), bckgWithSymbols)
         bboxYOLO = np.zeros((len(bboxes),5))
         j = 0
         for bbox in bboxes:
             bboxYOLO[j,0] = 0 # label
             bboxYOLO[j,1] = bbox.center_x/bckgWithSymbols.shape[1] # xcenter relative
-            bboxYOLO[j,2] = (bckgWithSymbols.shape[0] - bbox.center_y)/bckgWithSymbols.shape[0] # ycenter relative !yolo convention for y axis is opposite to imgAug so adapt
+            bboxYOLO[j,2] = (bckgWithSymbols.shape[0] - bbox.center_y)/bckgWithSymbols.shape[0] # ycenter relative !yolo convention for y axis is growing from the bottom i.e. opposite to imgAug so adapt
             bboxYOLO[j,3] = bbox.width/bckgWithSymbols.shape[1] # bbox width relative
             bboxYOLO[j,4] = bbox.height/bckgWithSymbols.shape[0] # bbox height relative
             j+=1
-        np.savetxt(fname = os.path.join(path,'trainingSet/training_sample_' + 
+        np.savetxt(fname = os.path.join(trainingPath, 'training_sample_' + 
                                         str(i) + '.txt'), X = bboxYOLO,
                     fmt=['%d','%.2f','%.2f','%.2f','%.2f'])
         i+=1
 
 
-# check some pictures
-toCheck = [11]
-for item in toCheck:
-    bboxes = overLayedPictures[item][1]
-    picture = overLayedPictures[item][0]
-    ia.imshow(BoundingBoxesOnImage(bboxes, shape=picture.shape).draw_on_image(picture, size=2))
+## check some pictures
+#toCheck = [0,5,10]
+#for item in toCheck:
+#    bboxes = overLayedPictures[item][1]
+#    picture = overLayedPictures[item][0]
+#    ia.imshow(picture) # throwing a range error but casting astype(np.uint8) solves the issue.
+#                        # should look at the code where to this properly
+#    #ia.imshow(BoundingBoxesOnImage(bboxes, shape=picture.shape).draw_on_image(picture, size=2))
 
