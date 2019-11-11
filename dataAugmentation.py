@@ -94,6 +94,19 @@ def overlay(sources, sourceBboxes, bckg):
             xLeft = xRight - widthSource
         if ((yTop-yBot > heightSource) | (yTop-yBot < heightSource)):
             yBot = yTop - heightSource
+        # can also happen that when recomputing the location,
+        # the coordinates go negative which is impossible
+        # therefore, make coordinate positive and then 
+        # translate by an amount equal to the negative value of the
+        # coordinate
+        if xLeft < 0:
+            xLeft = abs(xLeft)
+            delta = 2*xLeft
+            xRight = xRight + xLeft
+        if yBot < 0:
+            yBot = abs(yBot)
+            delta = 2*yBot
+            yTop = yTop +  yBot
         
         # perform overlay at chosen location
         # takes into account alpha channel of the source
@@ -163,7 +176,7 @@ def overlay(sources, sourceBboxes, bckg):
 
 # define the symbol to be recognized by YOLO
 # at the moment, code can only handle ONE symbol
-symbolsPath = os.path.join(os.getcwd(), r"rawSymbols")
+symbolsPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), r"rawSymbols")
 symbols = []
 for symbol in os.listdir(symbolsPath):
     if symbol.endswith("png") :
@@ -254,8 +267,8 @@ symbolsBbox = [bbox for _ in range(nbImg)]
 
 # Initialize the loop & launch
 i = 0
-backgroundPath = os.path.join(os.getcwd(), r"backGrounds")
-trainingPath = os.path.join(os.getcwd(),'trainingSet/')
+backgroundPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), r"backGrounds")
+trainingPath = os.path.join(os.path.dirname(os.path.realpath(__file__)),'trainingSet/')
 try:
     os.makedirs(trainingPath)
 except FileExistsError:
@@ -288,7 +301,7 @@ for background in os.listdir(backgroundPath):
         
         # write background with bboxes in YOLO format
         # png format is important to preserve alpha channel
-        cv2.imwrite(os.path.join(os.getcwd(), r'trainingSet/training_sample_' + str(i) + '.png'), bckgWithSymbols)
+        cv2.imwrite(os.path.join(os.path.dirname(os.path.realpath(__file__)), r'trainingSet/training_sample_' + str(i) + '.png'), bckgWithSymbols)
         bboxYOLO = np.zeros((len(bboxes),5))
         j = 0
         for bbox in bboxes:
