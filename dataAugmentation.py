@@ -102,11 +102,11 @@ def overlay(sources, sourceBboxes, bckg):
         if xLeft < 0:
             xLeft = abs(xLeft)
             delta = 2*xLeft
-            xRight = xRight + xLeft
+            xRight = xRight + delta
         if yBot < 0:
             yBot = abs(yBot)
             delta = 2*yBot
-            yTop = yTop +  yBot
+            yTop = yTop +  delta
         
         # perform overlay at chosen location
         # takes into account alpha channel of the source
@@ -180,7 +180,7 @@ symbolsPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), r"rawSym
 symbols = []
 for symbol in os.listdir(symbolsPath):
     if symbol.endswith("png") :
-        symbols.append(cv2.imread((r"rawSymbols/controlValve.png"),
+        symbols.append(cv2.imread(os.path.join(symbolsPath, symbol),
                     cv2.IMREAD_UNCHANGED)) # read with alpha channel
 
 # since manages only one symbol,
@@ -286,6 +286,7 @@ for background in os.listdir(backgroundPath):
     for j in range(perBackground): # choose the number of times to use a background
                             # for generating a training picture
         backgroundCV2 = cv2.imread(background)
+        backgroundCV2 = cv2.resize(backgroundCV2, (416, 416)) 
         # add alpha channel to background
         backgroundCV2 = np.concatenate((backgroundCV2, np.ones((backgroundCV2.shape[0], backgroundCV2.shape[1],1))*255), axis = 2)
         image_aug, bbs_aug = seq.augment(images = symbols, 
