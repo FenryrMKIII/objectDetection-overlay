@@ -68,12 +68,17 @@ def overlay(sources, sourceBboxes, bckg):
         widthSource = source.shape[1]
         bckgPadded = cv2.copyMakeBorder(bckg, heightSource, heightSource, widthSource, widthSource, cv2.BORDER_CONSTANT)
         
-        # Anchor is chosen randomly within the padded image i.e. the inclusion
-        # is allowed to be made outside the border of the bckg image
-        # this is to allow partial bounding box
-        # supposedly, this would help the training
-        xAnchor = np.random.choice(np.arange(round(widthSource/2), bckgPadded.shape[1]-round(widthSource/2))) # anchor represents the center. Therefore, only allowed between these bounds in the padded image
-        yAnchor = np.random.choice(np.arange(round(heightSource/2), bckgPadded.shape[0]-round(heightSource/2)))
+        # Anchor is chosen randomly within the padded image 
+        # but without allowing the picture to lie outside the original image
+        # in other words, the padding is not used at present
+        # padding shall be used in a further step to allow partial image to be 
+        # detected (this supposedly would help training) but this requires
+        # to recompute bounding boxes after inclusion (otherwhise, center of
+        # bbox could be outside the picture !) 
+        xAnchor = np.random.choice(np.arange(round(widthSource), bckgPadded.shape[1]-round(widthSource))) # anchor represents the center. Therefore, only allowed between these bounds in the padded image
+        yAnchor = np.random.choice(np.arange(round(heightSource), bckgPadded.shape[0]-round(heightSource)))
+        # note the round hereabove are for future when widthSource/2 will have to be used
+        # to allow partial inclusion of bbox
         
         # compute the boundaries of the source image inside the total image
         # This is performed assuming that in the source image, the 
