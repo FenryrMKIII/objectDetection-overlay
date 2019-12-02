@@ -75,8 +75,13 @@ def overlay(sources, sourceBboxes, bckg):
         # detected (this supposedly would help training) but this requires
         # to recompute bounding boxes after inclusion (otherwhise, center of
         # bbox could be outside the picture !) 
-        xAnchor = np.random.choice(np.arange(round(widthSource), bckgPadded.shape[1]-round(widthSource))) # anchor represents the center. Therefore, only allowed between these bounds in the padded image
-        yAnchor = np.random.choice(np.arange(round(heightSource), bckgPadded.shape[0]-round(heightSource)))
+        easy = True
+        if easy :
+            xAnchor = round(bckgPadded.shape[1]/2)
+            yAnchor = round(bckgPadded.shape[0]/2)
+        else :
+            xAnchor = np.random.choice(np.arange(round(widthSource), bckgPadded.shape[1]-round(widthSource))) # anchor represents the center. Therefore, only allowed between these bounds in the padded image
+            yAnchor = np.random.choice(np.arange(round(heightSource), bckgPadded.shape[0]-round(heightSource)))
         # note the round hereabove are for future when widthSource/2 will have to be used
         # to allow partial inclusion of bbox
         
@@ -299,7 +304,7 @@ for background in os.listdir(backgroundPath):
         bbs_aug = np.array([bbs.remove_out_of_image().clip_out_of_image() for bbs in bbs_aug]) # transforming to array instead of list for easier slicing
     
         # choose to include between 1 to 5 symbols in a background picture
-        nbSymbols = max(1, np.random.choice(5))
+        nbSymbols = max(1, np.random.choice(1))
         # then sample from the available augmented symbols and overlay them to the background picture
         samples = np.random.choice(np.array(np.arange(image_aug.shape[0])), nbSymbols)
         bckgWithSymbols, bboxes = overlay(image_aug[samples,:,:,:], bbs_aug[samples], backgroundCV2)
