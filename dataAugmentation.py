@@ -295,37 +295,38 @@ for background in os.listdir(backgroundPath):
     background = os.path.join(backgroundPath, background)
     for j in range(perBackground): # choose the number of times to use a background
                             # for generating a training picture
-        backgroundCV2 = cv2.imread(background)
-        backgroundCV2 = cv2.resize(backgroundCV2, (416, 416)) 
-        # add alpha channel to background
-        backgroundCV2 = np.concatenate((backgroundCV2, np.ones((backgroundCV2.shape[0], backgroundCV2.shape[1],1))*255), axis = 2)
-        image_aug, bbs_aug = seq.augment(images = symbols, 
-                                         bounding_boxes=symbolsBbox)
-        bbs_aug = np.array([bbs.remove_out_of_image().clip_out_of_image() for bbs in bbs_aug]) # transforming to array instead of list for easier slicing
-    
-        # choose to include between 1 to 5 symbols in a background picture
-        nbSymbols = max(1, np.random.choice(1))
-        # then sample from the available augmented symbols and overlay them to the background picture
-        samples = np.random.choice(np.array(np.arange(image_aug.shape[0])), nbSymbols)
-        bckgWithSymbols, bboxes = overlay(image_aug[samples,:,:,:], bbs_aug[samples], backgroundCV2)
-        overLayedPictures.append((bckgWithSymbols, bboxes))
+        if os.path.isfile(background):
+            backgroundCV2 = cv2.imread(background)
+            backgroundCV2 = cv2.resize(backgroundCV2, (416, 416)) 
+            # add alpha channel to background
+            backgroundCV2 = np.concatenate((backgroundCV2, np.ones((backgroundCV2.shape[0], backgroundCV2.shape[1],1))*255), axis = 2)
+            image_aug, bbs_aug = seq.augment(images = symbols, 
+                                            bounding_boxes=symbolsBbox)
+            bbs_aug = np.array([bbs.remove_out_of_image().clip_out_of_image() for bbs in bbs_aug]) # transforming to array instead of list for easier slicing
         
-        # write background with bboxes in YOLO format
-        # png format is important to preserve alpha channel
-        cv2.imwrite(os.path.join(os.path.dirname(os.path.realpath(__file__)), r'trainingSet/training_sample_' + str(i) + '.png'), bckgWithSymbols)
-        bboxYOLO = np.zeros((len(bboxes),5))
-        j = 0
-        for bbox in bboxes:
-            bboxYOLO[j,0] = 0 # label
-            bboxYOLO[j,1] = bbox.center_x/bckgWithSymbols.shape[1] # xcenter relative
-            bboxYOLO[j,2] = (bckgWithSymbols.shape[0] - bbox.center_y)/bckgWithSymbols.shape[0] # ycenter relative !yolo convention for y axis is growing from the bottom i.e. opposite to imgAug so adapt
-            bboxYOLO[j,3] = bbox.width/bckgWithSymbols.shape[1] # bbox width relative
-            bboxYOLO[j,4] = bbox.height/bckgWithSymbols.shape[0] # bbox height relative
-            j+=1
-        np.savetxt(fname = os.path.join(trainingPath, 'training_sample_' + 
-                                        str(i) + '.txt'), X = bboxYOLO,
-                    fmt=['%d','%.2f','%.2f','%.2f','%.2f'])
-        i+=1
+            # choose to include between 1 to 5 symbols in a background picture
+            nbSymbols = max(1, np.random.choice(1))
+            # then sample from the available augmented symbols and overlay them to the background picture
+            samples = np.random.choice(np.array(np.arange(image_aug.shape[0])), nbSymbols)
+            bckgWithSymbols, bboxes = overlay(image_aug[samples,:,:,:], bbs_aug[samples], backgroundCV2)
+            overLayedPictures.append((bckgWithSymbols, bboxes))
+            
+            # write background with bboxes in YOLO format
+            # png format is important to preserve alpha channel
+            cv2.imwrite(os.path.join(os.path.dirname(os.path.realpath(__file__)), r'trainingSet/training_sample_' + str(i) + '.png'), bckgWithSymbols)
+            bboxYOLO = np.zeros((len(bboxes),5))
+            j = 0
+            for bbox in bboxes:
+                bboxYOLO[j,0] = 0 # label
+                bboxYOLO[j,1] = bbox.center_x/bckgWithSymbols.shape[1] # xcenter relative
+                bboxYOLO[j,2] = (bckgWithSymbols.shape[0] - bbox.center_y)/bckgWithSymbols.shape[0] # ycenter relative !yolo convention for y axis is growing from the bottom i.e. opposite to imgAug so adapt
+                bboxYOLO[j,3] = bbox.width/bckgWithSymbols.shape[1] # bbox width relative
+                bboxYOLO[j,4] = bbox.height/bckgWithSymbols.shape[0] # bbox height relative
+                j+=1
+            np.savetxt(fname = os.path.join(trainingPath, 'training_sample_' + 
+                                            str(i) + '.txt'), X = bboxYOLO,
+                        fmt=['%d','%.2f','%.2f','%.2f','%.2f'])
+            i+=1
 
 
 ## check some pictures
