@@ -290,7 +290,7 @@ except FileExistsError:
     os.rmdir(trainingPath)
     os.makedirs(trainingPath)
 overLayedPictures = []
-perBackground = 2
+perBackground = 10
 for background in os.listdir(backgroundPath):
     background = os.path.join(backgroundPath, background)
     for j in range(perBackground): # choose the number of times to use a background
@@ -305,7 +305,7 @@ for background in os.listdir(backgroundPath):
             bbs_aug = np.array([bbs.remove_out_of_image().clip_out_of_image() for bbs in bbs_aug]) # transforming to array instead of list for easier slicing
         
             # choose to include between 1 to 5 symbols in a background picture
-            nbSymbols = max(1, np.random.choice(1))
+            nbSymbols = max(1, np.random.choice(5))
             # then sample from the available augmented symbols and overlay them to the background picture
             samples = np.random.choice(np.array(np.arange(image_aug.shape[0])), nbSymbols)
             bckgWithSymbols, bboxes = overlay(image_aug[samples,:,:,:], bbs_aug[samples], backgroundCV2)
