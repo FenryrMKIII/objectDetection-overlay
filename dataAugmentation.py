@@ -336,7 +336,7 @@ for background in os.listdir(backgroundPath):
             
             # write background with bboxes in YOLO format
             # png format is important to preserve alpha channel
-            cv2.imwrite(os.path.join(os.path.dirname(os.path.realpath(__file__)), r'trainingSet/training_sample_' + str(i) + '.png'), bckgWithSymbols[:,:,:])
+            cv2.imwrite(os.path.join(os.path.dirname(os.path.realpath(__file__)), r'trainingSet/training_sample_' + str(i) + '.png'), bckgWithSymbols[:,:,:3])
             bboxYOLO = np.zeros((len(bboxesOnBackground),5))
             j = 0
             for bbox in bboxesOnBackground:
