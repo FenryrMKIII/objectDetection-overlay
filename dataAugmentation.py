@@ -1,21 +1,31 @@
 import cv2
-import imgaug as ia
+import importlib
+import imgaug
+importlib.reload(imgaug)
 from imgaug import augmenters as iaa
 from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 import numpy as np
 import os
+import brambox
+from PIL import Image
 
 def overlay(sources, sourceBboxes, bckg):
     """
     overlay a source image containing bounding boxes onto a background
     
-    :param arg1: the source image(s)
-    :param arg2: the bounding boxe(s) around the source image(s)
-    :type arg1: list of cv2 image(s) with optional alpha channel
-    :type arg2: list of BoundingBox
-    :return: the background with overlayed sources and associated bounding boxes
-    :rtype: cv2 image, list of BoundingBox
-    
+    Parameters:
+    -----
+    sources(list of numpy arrays): the source image(s), potentially augmented (rotated, scaled, ...)
+    sourceBboxes(list of imgaug.augmentables.bbs.BoundingBoxesOnImage) : list of the bounding boxe(s) associated to the source image(s)
+    bckg (list of numpy arrays) : the background on which the source images will be overlayed
+
+    Returns:
+    --------
+    bckg (numpy array) : the background with overlayed sources images
+    targetBboxes (list of imgaug.augmentables.bbs.BoundingBoxesOnImage) : the bounding boxes of the sources images in the background image coordinate reference frame
+
+
+
     Details about the overlay function
     -------------------
     The overlay function works in conjunction with the imgaug package. 
@@ -40,7 +50,9 @@ def overlay(sources, sourceBboxes, bckg):
     """
     targetBboxes = []
     for source, sourceBbox in zip(sources, sourceBboxes):
-        
+        # view
+        #imgaug.imshow(sourceBbox.draw_on_image(source, color=(0, 255, 0, 255)))
+
         # reshape source in order to limit its size on the bckg
         # ratio is chosen based on the width i.e. x-axis (arbitrarily)
         ratioChoice = np.arange(0.2, 0.5, step = 0.01)
@@ -54,6 +66,15 @@ def overlay(sources, sourceBboxes, bckg):
         # remember the alpha channel of the source if one exists
         try:
             alpha = source[:,:,3]/255
+            if bckg.shape[-1] != 4:
+                # Have to use PIL because ... Don't know why
+                # Performing the operation using numpy arrays 
+                # i.e. np.concatenate((bckg,np.expand_dims(np.ones(bckg.shape[:-1])*255,axis=2)), axis=2)
+                # somehow does not work (image appears fully white)
+                # altough the produced numpy array is identical to what PIL produces and saving it to a png
+                # e.g. matplotlib.image.imsave('name.png', myArray/255) produces the
+                # desired picture
+                bckg = np.array(Image.fromarray(bckg).convert('RGBA'))
         except IndexError:
             print("Source image has no alpha channel," 
                   "overlayed source will not feature any transparency")
@@ -120,7 +141,7 @@ def overlay(sources, sourceBboxes, bckg):
         
         # perform overlay at chosen location
         # takes into account alpha channel of the source
-        if alpha.any():
+        try:
             alphaMask = alpha       
                                      # augmentation such as blur, ... touches
                                      # the alpha channel values
@@ -136,9 +157,11 @@ def overlay(sources, sourceBboxes, bckg):
         # simply create a dummy mask with shape (heightSource, widthSource)
         # that sets the alpha channel as 255 everywhere i.e. 
         # include the entire source image into the background without 
-        # any transparency
-        else:
+        # any transparency                    
+        except NameError:
             alphaMask = np.ones(source.shape[:2])
+            alphaMask = np.expand_dims(alphaMask, axis=3)
+
         bckgPadded[yBot:yTop, xLeft:xRight, :] = (alphaMask*source[:,:,:] +
         (1-alphaMask)*bckgPadded[yBot:yTop, xLeft:xRight, :])
         #bckgPadded[yBot:yTop, xLeft:xRight, :] = np.where(alphaMask, source, bckgPadded[yBot:yTop, xLeft:xRight,:])
@@ -169,7 +192,8 @@ def overlay(sources, sourceBboxes, bckg):
         # Keep only the original picture without the padding
         bckg = bckgPadded[heightSource:heightSource+bckg.shape[0],
                                    widthSource:widthSource+bckg.shape[1]]
-        
+    # view
+    #imgaug.imshow(BoundingBoxesOnImage(targetBboxes, bckg.shape).draw_on_image(bckg, color = (0,255,0,255)))
     # check if bounding boxes are within the picture
     i = 0
     for bbox in targetBboxes:
@@ -181,7 +205,7 @@ def overlay(sources, sourceBboxes, bckg):
         else :
             targetBboxes[i] = bbox.clip_out_of_image(bckg.shape)
             i+=1
-        
+    
     return bckg, targetBboxes
 
 # define the symbol to be recognized by YOLO
@@ -193,33 +217,41 @@ for symbol in os.listdir(symbolsPath):
         symbols.append(cv2.imread(os.path.join(symbolsPath, symbol),
                     cv2.IMREAD_UNCHANGED)) # read with alpha channel
 
-# since manages only one symbol,
-# change list to single
-symbol = symbols[0]
+# Then define bounding box (manual definition)
+bboxes = [BoundingBoxesOnImage([
+        BoundingBox(x1=860, y1=860, 
+                x2=1720, y2=1533)],  # position bounding box just before last pixel
+                shape=symbols[0].shape),
+        BoundingBoxesOnImage([
+        BoundingBox(x1=819, y1=769, 
+                x2=1831, y2=1499)],  # position bounding box just before last pixel
+                shape=symbols[1].shape),
+        BoundingBoxesOnImage([
+        BoundingBox(x1=781, y1=565, 
+                x2=1767, y2=1675)],  # position bounding box just before last pixel
+                shape=symbols[2].shape)]
+
+# for symbol, bbox in zip(symbols, bboxes):
+#     imgaug.imshow(bbox.draw_on_image(symbol, color=(0, 255, 0, 255)))
 
 # and define its bounding box i.e. surrounding the complete picture symbol
 # note that to avoid issues, the top left anchor of bounding box is 
 # positioned just after first pixel i.e. (+margin, +margin) relative to (0,0)
 # and bottom right anchor is positioned just before last pixel
 # i.e. (-margin,-margin) relative to image width and height
-margin = 5
-bbox = BoundingBoxesOnImage([
-    BoundingBox(x1=0+margin, y1=0+margin, 
-                x2=symbol.shape[1]-margin, y2=symbol.shape[0]-margin)],  # position bounding box just before last pixel
-                shape=symbol.shape)
+
+
+# Visualize bbox
 
 # take care if one wants to plot the bounding box
 # source has an alpha channel and imgAug don't directly plot correctly
 # such picture. Manipulation is required otherwhise picture & boxs will appear
 # all black. Example is shown below
-#alphaMask = symbol[:,:,3] == 255
-#bChannel = 255*alphaMask
-#symbolBlue = symbol.copy()
-#symbolBlue[:,:,2] = bChannel
-#ia.imshow(symbolBlue)
-#ia.imshow(symbol)
-#ia.imshow(bbox.draw_on_image(symbolBlue[:,:,:3], size=2)) # view correctly
-#ia.imshow(bbox.draw_on_image(symbol[:,:,:3], size=2)) # view all black
+# alphaMask = symbol[:,:,3] == 255
+# bChannel = 255*alphaMask
+# symbolBlue = symbol.copy()
+# symbolBlue[:,:,2] = bChannel
+
 
 
 # define the desired augmentation
@@ -249,6 +281,7 @@ seq = iaa.Sequential([
         rotate=(-180, +180),
         shear=(-8, 8)
     )
+    #,iaa.Pad(100)
 ], random_order=False) # apply augmenters in random order
 
 #seq = iaa.Sequential([
@@ -258,22 +291,6 @@ seq = iaa.Sequential([
 #                shear=(-8, 8))), 
 #        iaa.WithChannels([0,1,2,3], iaa.GaussianBlur(sigma=(3.0,10.0)))
 #                        ], random_order=False)
-
-# create an array of identical pictures to be augmented
-# with corresponding bounding boxes
-nbImg = 32
-symbols = np.array([symbol for _ in range(nbImg)],dtype=np.uint8)
-symbolsBbox = [bbox for _ in range(nbImg)]
-#
-#image_aug, bbs_aug = seq.augment(images = symbols, 
-#                                         bounding_boxes=symbolsBbox)
-#
-#for img in image_aug:
-#    alphaMask = img[:,:,3] > 50
-#    bChannel = 255*alphaMask
-#    imgBlue = img.copy()
-#    imgBlue[:,:,2] = bChannel
-#    ia.imshow(imgBlue[:,:,:])
 
 # Initialize the loop & launch
 i = 0
@@ -298,25 +315,31 @@ for background in os.listdir(backgroundPath):
         if os.path.isfile(background):
             backgroundCV2 = cv2.imread(background)
             backgroundCV2 = cv2.resize(backgroundCV2, (416, 416)) 
-            # add alpha channel to background
-            backgroundCV2 = np.concatenate((backgroundCV2, np.ones((backgroundCV2.shape[0], backgroundCV2.shape[1],1))*255), axis = 2)
-            image_aug, bbs_aug = seq.augment(images = symbols, 
-                                            bounding_boxes=symbolsBbox)
-            bbs_aug = np.array([bbs.remove_out_of_image().clip_out_of_image() for bbs in bbs_aug]) # transforming to array instead of list for easier slicing
-        
-            # choose to include between 1 to 5 symbols in a background picture
-            nbSymbols = max(1, np.random.choice(5))
-            # then sample from the available augmented symbols and overlay them to the background picture
-            samples = np.random.choice(np.array(np.arange(image_aug.shape[0])), nbSymbols)
-            bckgWithSymbols, bboxes = overlay(image_aug[samples,:,:,:], bbs_aug[samples], backgroundCV2)
-            overLayedPictures.append((bckgWithSymbols, bboxes))
+
+            # choose to include between 0 to 3 instances from each symbol in a background picture
+            symbolsForAug = []
+            symbolsBboxForAug = []
+            for symbol, bbox in zip(symbols, bboxes):
+                nbInstance = max(0, np.random.choice(3))
+                symbolsForAug += [symbol for _ in range(nbInstance)]
+                symbolsBboxForAug += [bbox for _ in range(nbInstance)]
+            symbolsForAug = np.array(symbolsForAug,dtype=np.uint8)
+            if symbolsForAug.shape[0] != 0:
+                image_aug, bbs_aug = seq.augment(images=symbolsForAug, bounding_boxes=symbolsBboxForAug)
+                bbs_aug = np.array([bbs.remove_out_of_image().clip_out_of_image() for bbs in bbs_aug]) # transforming to array instead of list for easier slicing
+                bckgWithSymbols, bboxesOnBackground = overlay(image_aug, bbs_aug, backgroundCV2)
+            else:
+                # no symbols overlayed
+                bckgWithSymbols = backgroundCV2
+                bboxesOnBackground = []
+            overLayedPictures.append((bckgWithSymbols, bboxesOnBackground))
             
             # write background with bboxes in YOLO format
             # png format is important to preserve alpha channel
-            cv2.imwrite(os.path.join(os.path.dirname(os.path.realpath(__file__)), r'trainingSet/training_sample_' + str(i) + '.png'), bckgWithSymbols[:,:,:-1])
-            bboxYOLO = np.zeros((len(bboxes),5))
+            cv2.imwrite(os.path.join(os.path.dirname(os.path.realpath(__file__)), r'trainingSet/training_sample_' + str(i) + '.png'), bckgWithSymbols[:,:,:])
+            bboxYOLO = np.zeros((len(bboxesOnBackground),5))
             j = 0
-            for bbox in bboxes:
+            for bbox in bboxesOnBackground:
                 bboxYOLO[j,0] = 0 # label
                 bboxYOLO[j,1] = bbox.center_x/bckgWithSymbols.shape[1] # xcenter relative
                 bboxYOLO[j,2] = bbox.center_y/bckgWithSymbols.shape[0] #(bckgWithSymbols.shape[0] - bbox.center_y)/bckgWithSymbols.shape[0] # ycenter relative !yolo convention for y axis is growing from the bottom i.e. opposite to imgAug so adapt
