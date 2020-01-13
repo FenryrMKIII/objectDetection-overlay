@@ -307,7 +307,7 @@ except FileExistsError:
     os.rmdir(trainingPath)
     os.makedirs(trainingPath)
 overLayedPictures = []
-perBackground = 10
+perBackground = 100
 for background in os.listdir(backgroundPath):
     background = os.path.join(backgroundPath, background)
     for j in range(perBackground): # choose the number of times to use a background
