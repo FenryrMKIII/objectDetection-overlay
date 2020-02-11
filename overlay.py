@@ -271,7 +271,8 @@ def makeOverly(image, id=None):
     h = overly["image"].shape[0]
     w = overly["image"].shape[1]
     bboxMargin = (
-        1  # in px, 1px is minimum otherwhise albumentation complains when augmenting
+        2  # in px, 1px is minimum otherwhise albumentation complains when augmenting
+           # 2px avoids rounding issues (greater than 1.0 for box size, ...)
     )
     hbbox = h - 2 * bboxMargin  # bbox takes whole image minus margin
     wbbox = w - 2 * bboxMargin
