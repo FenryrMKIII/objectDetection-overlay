@@ -370,9 +370,9 @@ if __name__ == "__main__":
                     trainingSetPath.joinpath("train_sample_" + str(j) + ".txt"),
                     mode="wt",
                 ) as f:
-                    for bbox in bckgWithOverlies["bboxes"]:
+                    for i, bbox in enumerate(bckgWithOverlies["bboxes"]):
                         yolo = "{:.2f} {:.2f} {:.2f} {:.2f} {:d}\n".format(
-                            *bckgWithOverlies["category_id"] + bbox
+                            *[bckgWithOverlies["category_id"][i]] + bbox
                         )
                         f.write(yolo)
 
