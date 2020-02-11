@@ -371,7 +371,7 @@ if __name__ == "__main__":
                 ) as f:
                     for bbox in bckgWithOverlies["bboxes"]:
                         yolo = "{:.2f} {:.2f} {:.2f} {:.2f} {:d}\n".format(
-                            *bbox + bckgWithOverlies["category_id"]
+                            *bckgWithOverlies["category_id"] + bbox
                         )
                         f.write(yolo)
 
