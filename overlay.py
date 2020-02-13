@@ -212,53 +212,55 @@ BOX_COLOR = (255, 0, 0, 255)
 TEXT_COLOR = (255, 255, 255)
 
 
-def visualize_bbox(
-    img, bbox, class_id, class_idx_to_name, color=BOX_COLOR, thickness=2
-):
-    xc_bbox_abs, yc_bbox_abs, w_bbox_abs, h_bbox_abs = (
-        bbox[0] * img.shape[1],
-        bbox[1] * img.shape[0],
-        bbox[2] * img.shape[1],
-        bbox[3] * img.shape[0],
-    )
-    x_min, y_min, x_max, y_max = (
-        int(xc_bbox_abs - w_bbox_abs / 2),
-        int(yc_bbox_abs - h_bbox_abs / 2),
-        int(xc_bbox_abs + w_bbox_abs / 2),
-        int(yc_bbox_abs + h_bbox_abs / 2),
-    )
-    cv2.rectangle(img, (x_min, y_min), (x_max, y_max), color=color, thickness=thickness)
-    class_name = class_idx_to_name[class_id]
-    ((text_width, text_height), _) = cv2.getTextSize(
-        class_name, cv2.FONT_HERSHEY_SIMPLEX, 0.35, 1
-    )
-    cv2.rectangle(
-        img,
-        (x_min, y_min - int(1.3 * text_height)),
-        (x_min + text_width, y_min),
-        BOX_COLOR,
-        -1,
-    )
-    cv2.putText(
-        img,
-        class_name,
-        (x_min, y_min - int(0.3 * text_height)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.35,
-        TEXT_COLOR,
-        lineType=cv2.LINE_AA,
-    )
+def draw_bbox(annotations, category_id_to_name):
+
+    img = annotations["image"].copy()
+    color = BOX_COLOR
+    thickness = 2
+
+    for idx, bbox in enumerate(annotations["bboxes"]):
+        class_id = annotations["category_id"][idx]
+        xc_bbox_abs, yc_bbox_abs, w_bbox_abs, h_bbox_abs = (
+            bbox[0] * img.shape[1],
+            bbox[1] * img.shape[0],
+            bbox[2] * img.shape[1],
+            bbox[3] * img.shape[0],
+        )
+        x_min, y_min, x_max, y_max = (
+            int(xc_bbox_abs - w_bbox_abs / 2),
+            int(yc_bbox_abs - h_bbox_abs / 2),
+            int(xc_bbox_abs + w_bbox_abs / 2),
+            int(yc_bbox_abs + h_bbox_abs / 2),
+        )
+        cv2.rectangle(
+            img, (x_min, y_min), (x_max, y_max), color=color, thickness=thickness
+        )
+        class_name = category_id_to_name[class_id]
+        ((text_width, text_height), _) = cv2.getTextSize(
+            class_name, cv2.FONT_HERSHEY_SIMPLEX, 0.35, 1
+        )
+        cv2.rectangle(
+            img,
+            (x_min, y_min - int(1.3 * text_height)),
+            (x_min + text_width, y_min),
+            BOX_COLOR,
+            -1,
+        )
+        cv2.putText(
+            img,
+            class_name,
+            (x_min, y_min - int(0.3 * text_height)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.35,
+            TEXT_COLOR,
+            lineType=cv2.LINE_AA,
+        )
     return img
 
 
-def visualize(annotations, category_id_to_name):
-    img = annotations["image"].copy()
-    for idx, bbox in enumerate(annotations["bboxes"]):
-        img = visualize_bbox(
-            img, bbox, annotations["category_id"][idx], category_id_to_name
-        )
+def visualize(img_with_bbox):
     plt.figure(figsize=(12, 12))
-    plt.imshow(img)
+    plt.imshow(img_with_bbox)
     plt.show()
 
 
@@ -272,7 +274,7 @@ def makeOverly(image, id=None):
     w = overly["image"].shape[1]
     bboxMargin = (
         2  # in px, 1px is minimum otherwhise albumentation complains when augmenting
-           # 2px avoids rounding issues (greater than 1.0 for box size, ...)
+        # 2px avoids rounding issues (greater than 1.0 for box size, ...)
     )
     hbbox = h - 2 * bboxMargin  # bbox takes whole image minus margin
     wbbox = w - 2 * bboxMargin
@@ -281,6 +283,34 @@ def makeOverly(image, id=None):
     ]  # yolo format [xcenter, ycenter, width, height] all relative to total picture size
     overly["category_id"] = [id]
     return overly
+
+
+def rbga2rbg(img):
+    trans_mask = img[:, :, 3] == 0
+    img[trans_mask] = [255, 255, 255, 255]
+    return cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
+
+
+def resizeYoloV3(img, dim):
+    # resize only (to a multiple of YoloV3 stride (32))
+    h, w = img.shape
+    maxDim = np.argmax([h, w])
+    ar = h / w
+    if maxDim == 0: # if maxDim is axis 0, resize axis 1
+        newSize = dim, round(dim / ar)  # maybe not divisible by 32 ...
+        quo, rest = divmod(newSize[1], 32) 
+        newSize = (
+            dim,
+            32 * quo,
+        )  # therefore make it divisible by 32 even if modifying aspect ratio (ar)
+    else: # if maxDim is axis 1, resize axis 0
+        newSize = round(ar * dim), dim
+        quo, rest = divmod(newSize[0], 32) 
+        newSize = (
+            32 * quo,
+            dim,
+        ) 
+    return cv2.resize(img, (w,h))
 
 
 if __name__ == "__main__":
@@ -314,6 +344,26 @@ if __name__ == "__main__":
         default=None,
         help="Path to images to serve as backgrounds",
     )
+    parser.add_argument(
+        "-r",
+        "--resize",
+        required=False,
+        type=int,
+        default=None,
+        help="Resize the biggest dimension to specified size in px",
+    )
+    parser.add_argument(
+        "--noAlpha",
+        required=False,
+        action='store_true',
+        help="Convert the image to rgb instead of rgba",
+    )
+    parser.add_argument(
+        "--saveBBOX",
+        required=False,
+        action='store_true',
+        help="save the images with bbox displayed",
+    )
 
     args = parser.parse_args()
 
@@ -339,6 +389,8 @@ if __name__ == "__main__":
     for background in backgroundPath.iterdir():
         if background.is_file():
             backgroundImg = cv2.imread(str(background), cv2.IMREAD_UNCHANGED)
+            if args.resize:
+                backgroundImg = resizeYoloV3(backgroundImg, args.resize)
             for j in range(perBackground):
                 # schedule augmentation of overlies
                 rotate = albumentations.augmentations.transforms.RandomRotate90(p=0.25)
@@ -362,6 +414,9 @@ if __name__ == "__main__":
                 # overlay augmented overlies on background
                 bckgWithOverlies = overlay(augmented, backgroundImg)
 
+                if args.noAlpha:
+                    bckgWithOverlies["image"] = rbga2rbg(bckgWithOverlies["image"])
+
                 cv2.imwrite(
                     str(trainingSetPath.joinpath("train_sample_" + str(j) + ".png")),
                     bckgWithOverlies["image"],
@@ -375,6 +430,14 @@ if __name__ == "__main__":
                             *[bckgWithOverlies["category_id"][i]] + bbox
                         )
                         f.write(yolo)
-
-                # visualize(bckgWithOverlies, id_to_categry)
+                if args.saveBBOX:
+                    bckg_with_bbox = draw_bbox(bckgWithOverlies, id_to_categry)
+                    cv2.imwrite(
+                        str(
+                            Path("trainingSet_with_bbox").joinpath(
+                                "train_sample_" + str(j) + ".png"
+                            )
+                        ),
+                        bckg_with_bbox,
+                    )
 
