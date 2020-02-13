@@ -296,21 +296,21 @@ def resizeYoloV3(img, dim):
     h, w = img.shape
     maxDim = np.argmax([h, w])
     ar = h / w
-    if maxDim == 0: # if maxDim is axis 0, resize axis 1
+    if maxDim == 0:  # if maxDim is axis 0, resize axis 1
         newSize = dim, round(dim / ar)  # maybe not divisible by 32 ...
-        quo, rest = divmod(newSize[1], 32) 
+        quo, rest = divmod(newSize[1], 32)
         newSize = (
             dim,
             32 * quo,
         )  # therefore make it divisible by 32 even if modifying aspect ratio (ar)
-    else: # if maxDim is axis 1, resize axis 0
+    else:  # if maxDim is axis 1, resize axis 0
         newSize = round(ar * dim), dim
-        quo, rest = divmod(newSize[0], 32) 
+        quo, rest = divmod(newSize[0], 32)
         newSize = (
             32 * quo,
             dim,
-        ) 
-    return cv2.resize(img, (w,h))
+        )
+    return cv2.resize(img, (w, h))
 
 
 if __name__ == "__main__":
@@ -355,13 +355,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--noAlpha",
         required=False,
-        action='store_true',
+        action="store_true",
         help="Convert the image to rgb instead of rgba",
     )
     parser.add_argument(
         "--saveBBOX",
         required=False,
-        action='store_true',
+        action="store_true",
         help="save the images with bbox displayed",
     )
 
@@ -432,12 +432,12 @@ if __name__ == "__main__":
                         f.write(yolo)
                 if args.saveBBOX:
                     bckg_with_bbox = draw_bbox(bckgWithOverlies, id_to_categry)
+                    savePath = Path("trainingSet_with_bbox").joinpath(
+                        "train_sample_" + str(j) + ".png"
+                    )
+                    if not savePath.parent.exists():
+                        savePath.parent.mkdir(parents=True)
                     cv2.imwrite(
-                        str(
-                            Path("trainingSet_with_bbox").joinpath(
-                                "train_sample_" + str(j) + ".png"
-                            )
-                        ),
-                        bckg_with_bbox,
+                        str(savePath), bckg_with_bbox,
                     )
 
