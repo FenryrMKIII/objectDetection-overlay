@@ -426,7 +426,7 @@ if __name__ == "__main__":
                     mode="wt",
                 ) as f:
                     for i, bbox in enumerate(bckgWithOverlies["bboxes"]):
-                        yolo = "{:d} {:.2f} {:.2f} {:.2f} {:.2f}\n".format(
+                        yolo = "{:d} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(
                             *[bckgWithOverlies["category_id"][i]] + bbox
                         )
                         f.write(yolo)
