@@ -423,7 +423,7 @@ if __name__ == "__main__":
                 )
                 with open(
                     trainingSetPath.joinpath("train_sample_" + str(j) + ".txt"),
-                    mode="wt", encoding="utf-8"
+                    mode="w", encoding="utf-8", newline=None
                 ) as f:
                     for i, bbox in enumerate(bckgWithOverlies["bboxes"]):
                         yolo = "{:d} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(
