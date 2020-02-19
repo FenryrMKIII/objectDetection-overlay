@@ -1,9 +1,11 @@
 import cv2
+import imutils
 import numpy as np
 import os
 import argparse
 from pathlib import Path
 from matplotlib import pyplot as plt
+import imutils
 
 import albumentations
 from albumentations import BboxParams, Compose
@@ -53,9 +55,11 @@ def overlay(overlies, bckg):
     for overly in overlies:
 
         # reshape source in order to limit its size on the bckg
-        # ratio is chosen based on the width i.e. x-axis (arbitrarily)
-        # ratioChoice = np.arange(0.2, 0.06, step=0.1)
-        ratioChosen = 0.02  # np.random.choice(ratioChoice)
+        # ratio is chosen based on the width i.e. x-axis
+        # the figures are based on analysis performed on the desired
+        # detections
+        ratioChoice = np.arange(0.01, 0.025, step=0.001)
+        ratioChosen = np.random.choice(ratioChoice,1)[0]
 
         resize = albumentations.augmentations.transforms.LongestMaxSize(
             max_size=int(ratioChosen * bckg.shape[1]), always_apply=True
@@ -146,21 +150,19 @@ def overlay(overlies, bckg):
         alpha_rgb = np.repeat(alpha_rgb, 3, axis=2)
         alpha_rgb = alpha_rgb.astype(float) / 255
         foreground = cv2.multiply(
-            alpha_rgb, overly["image"][:, :, :-1], dtype=cv2.CV_32F
+            alpha_rgb, overly["image"][:, :, :-1], dtype=cv2.CV_64F
         )
         background = cv2.multiply(
             1 - alpha_rgb,
             bckgPadded[yBot:yTop, xLeft:xRight][:, :, :-1],
             dtype=cv2.CV_32F,
         )
-        bckgPadded[yBot:yTop, xLeft:xRight][:, :, :-1] = cv2.add(foreground, background)
-        bckgPadded[yBot:yTop, xLeft:xRight][:, :, -1] = alpha
+        bckgPadded[yBot:yTop, xLeft:xRight][:, :, :-1] = cv2.add(foreground, background, dtype=cv2.CV_64F)
+        # bckgPadded[yBot:yTop, xLeft:xRight][:, :, -1] = alpha # WRONG
         # Keep only the original picture without the padding
         bckg = bckgPadded[
             hO : hO + bckg.shape[0], wO : wO + bckg.shape[1],
         ]
-        cv2.imwrite("yalah.png", bckg[:, :, :])
-
         # In source image, bounding box is around the entire image
         # and assumed at the middle therefore one computes the distance between
         # the center of the bounding box and its edges
@@ -293,24 +295,26 @@ def rbga2rbg(img):
 
 def resizeYoloV3(img, dim):
     # resize only (to a multiple of YoloV3 stride (32))
-    h, w = img.shape
+    h, w = img.shape[:-1]
     maxDim = np.argmax([h, w])
     ar = h / w
-    if maxDim == 0:  # if maxDim is axis 0, resize axis 1
+    if maxDim == 0:  # if maxDim is axis 0, resize axis 0
         newSize = dim, round(dim / ar)  # maybe not divisible by 32 ...
         quo, rest = divmod(newSize[1], 32)
+        # (w, h)
         newSize = (
-            dim,
             32 * quo,
+            dim
         )  # therefore make it divisible by 32 even if modifying aspect ratio (ar)
-    else:  # if maxDim is axis 1, resize axis 0
+    else:  # if maxDim is axis 1, resize axis 1
         newSize = round(ar * dim), dim
         quo, rest = divmod(newSize[0], 32)
+        # (w, h)
         newSize = (
-            32 * quo,
             dim,
+            32 * quo
         )
-    return cv2.resize(img, (w, h))
+    return cv2.resize(img, newSize)
 
 
 if __name__ == "__main__":
@@ -386,14 +390,18 @@ if __name__ == "__main__":
         trainingSetPath.mkdir()
 
     perBackground = 100
+    counter = 0
     for background in backgroundPath.iterdir():
         if background.is_file():
             backgroundImg = cv2.imread(str(background), cv2.IMREAD_UNCHANGED)
             if args.resize:
                 backgroundImg = resizeYoloV3(backgroundImg, args.resize)
+            h, w = backgroundImg.shape[:-1]
+            if h > w : # make all background display as landscape
+                backgroundImg = imutils.rotate_bound(backgroundImg, 90)
             for j in range(perBackground):
                 # schedule augmentation of overlies
-                rotate = albumentations.augmentations.transforms.RandomRotate90(p=0.25)
+                rotate = albumentations.augmentations.transforms.RandomRotate90(p=0.5)
                 aug = Compose(
                     [rotate],
                     bbox_params=BboxParams(
@@ -417,12 +425,22 @@ if __name__ == "__main__":
                 if args.noAlpha:
                     bckgWithOverlies["image"] = rbga2rbg(bckgWithOverlies["image"])
 
+                if args.saveBBOX:
+                    bckg_with_bbox = draw_bbox(bckgWithOverlies, id_to_categry)
+                    savePath = Path("trainingSet_with_bbox").joinpath(
+                        "train_sample_" + str(counter) + ".png"
+                    )
+                    if not savePath.parent.exists():
+                        savePath.parent.mkdir(parents=True)
+                    cv2.imwrite(
+                        str(savePath), bckg_with_bbox,
+                    )
                 cv2.imwrite(
-                    str(trainingSetPath.joinpath("train_sample_" + str(j) + ".png")),
+                    str(trainingSetPath.joinpath("train_sample_" + str(counter) + ".png")),
                     bckgWithOverlies["image"],
                 )
                 with open(
-                    trainingSetPath.joinpath("train_sample_" + str(j) + ".txt"),
+                    trainingSetPath.joinpath("train_sample_" + str(counter) + ".txt"),
                     mode="w", encoding="utf-8", newline=None
                 ) as f:
                     for i, bbox in enumerate(bckgWithOverlies["bboxes"]):
@@ -430,14 +448,5 @@ if __name__ == "__main__":
                             *[bckgWithOverlies["category_id"][i]] + bbox
                         )
                         f.write(yolo)
-                if args.saveBBOX:
-                    bckg_with_bbox = draw_bbox(bckgWithOverlies, id_to_categry)
-                    savePath = Path("trainingSet_with_bbox").joinpath(
-                        "train_sample_" + str(j) + ".png"
-                    )
-                    if not savePath.parent.exists():
-                        savePath.parent.mkdir(parents=True)
-                    cv2.imwrite(
-                        str(savePath), bckg_with_bbox,
-                    )
+                counter+=1
 
