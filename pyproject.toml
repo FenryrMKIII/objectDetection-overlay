@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "odsyntds"
+version = "0.1.0"
+description = "A utility to create a synthetic object detection dataset starting from backgrounds & objects"
+authors = ["Jérémy Bulle"]
+
+[tool.poetry.dependencies]
+python = ">=3.6"
+albumentations = "^0.5.1"
+opencv-python = "^4.4.0"
+imutils = "^0.5.3"
+matplotlib = "^3.3.3"
+importlib-metadata = "^2.0.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^3.4"
